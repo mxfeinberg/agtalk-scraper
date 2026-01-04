@@ -1,0 +1,224 @@
+"""
+HTML parser for AgTalk forum structure.
+"""
+
+import logging
+import re
+from urllib.parse import urljoin, urlparse, parse_qs
+from bs4 import BeautifulSoup
+from typing import Dict, List, Optional
+
+class AgTalkParser:
+    """Parser for AgTalk forum HTML structure."""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    def extract_post_urls(self, soup: BeautifulSoup, base_url: str) -> List[str]:
+        """Extract post URLs from forum page."""
+        post_urls = []
+        
+        try:
+            # Look for links to individual posts/topics
+            # AgTalk typically uses topic-view.asp for individual posts
+            links = soup.find_all('a', href=True)
+            
+            for link in links:
+                href = str(link.get('href', ''))
+                
+                # Look for thread view links (AgTalk uses thread-view.asp)
+                if 'thread-view.asp' in href and 'tid=' in href:
+                    # Extract just the tid parameter and build clean URL
+                    tid_match = re.search(r'tid=(\d+)', href)
+                    if tid_match:
+                        tid = tid_match.group(1)
+                        clean_url = f"{base_url}/forums/thread-view.asp?tid={tid}"
+                        if clean_url not in post_urls:
+                            post_urls.append(clean_url)
+                
+                # Also look for other post patterns
+                elif 'topic-view.asp' in href or 'reply-view.asp' in href:
+                    full_url = urljoin(base_url, href)
+                    if full_url not in post_urls:
+                        post_urls.append(full_url)
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_urls = []
+            for url in post_urls:
+                if url not in seen:
+                    seen.add(url)
+                    unique_urls.append(url)
+            
+            self.logger.debug(f"Extracted {len(unique_urls)} unique post URLs")
+            return unique_urls
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting post URLs: {str(e)}")
+            return []
+    
+    def extract_post_data(self, soup: BeautifulSoup, url: str) -> Optional[Dict]:
+        """Extract post data from individual post page."""
+        try:
+            post_data = {
+                'url': url,
+                'title': '',
+                'author': '',
+                'post_date': '',
+                'content': '',
+                'thread_id': '',
+                'post_number': 0
+            }
+            
+            # Extract thread ID from URL
+            parsed_url = urlparse(url)
+            query_params = parse_qs(parsed_url.query)
+            if 'tid' in query_params:
+                post_data['thread_id'] = query_params['tid'][0]
+            
+            # Extract title - usually in <title> tag or main heading
+            title_elem = soup.find('title')
+            if title_elem:
+                post_data['title'] = self.clean_text(title_elem.get_text())
+            
+            # Look for alternative title locations
+            if not post_data['title']:
+                # Try h1, h2, or other heading tags
+                for tag in ['h1', 'h2', 'h3']:
+                    heading = soup.find(tag)
+                    if heading:
+                        post_data['title'] = self.clean_text(heading.get_text())
+                        break
+            
+            # Extract post content - AgTalk uses specific table structure
+            content_selectors = [
+                'td.messagemiddle',  # AgTalk specific
+                '.post-content',
+                '.message-content',
+                '.topic-content',
+                'td[class*="message"]',
+                'div[class*="post"]',
+                'div[class*="message"]',
+                'div[class*="content"]'
+            ]
+            
+            content_found = False
+            for selector in content_selectors:
+                content_elem = soup.select_one(selector)
+                if content_elem:
+                    # For AgTalk, get the last messagemiddle cell which contains the actual content
+                    if selector == 'td.messagemiddle':
+                        all_content_cells = soup.select('td.messagemiddle')
+                        if len(all_content_cells) >= 2:
+                            # The second messagemiddle cell contains the post content
+                            content_elem = all_content_cells[1]
+                    
+                    post_data['content'] = self.clean_text(content_elem.get_text())
+                    content_found = True
+                    break
+            
+            # If no specific content container found, look for table-based layout
+            if not content_found:
+                # AgTalk might use table-based layout
+                tables = soup.find_all('table')
+                for table in tables:
+                    # Look for table cells that contain substantial text
+                    cells = table.find_all(['td', 'th'])
+                    for cell in cells:
+                        text = self.clean_text(cell.get_text())
+                        if len(text) > 50:  # Assume substantial content
+                            if not post_data['content'] or len(text) > len(post_data['content']):
+                                post_data['content'] = text
+            
+            # Extract author information - AgTalk stores this in messageheader
+            author_selectors = [
+                'td.messageheader a',  # AgTalk specific - author link in messageheader
+                '.author',
+                '.poster',
+                '.username',
+                'span[class*="author"]',
+                'div[class*="author"]',
+                'a[class*="user"]'
+            ]
+            
+            for selector in author_selectors:
+                author_elem = soup.select_one(selector)
+                if author_elem:
+                    post_data['author'] = self.clean_text(author_elem.get_text())
+                    break
+            
+            # Extract post date
+            date_selectors = [
+                '.post-date',
+                '.date',
+                '.timestamp',
+                'span[class*="date"]',
+                'div[class*="date"]'
+            ]
+            
+            for selector in date_selectors:
+                date_elem = soup.select_one(selector)
+                if date_elem:
+                    post_data['post_date'] = self.clean_text(date_elem.get_text())
+                    break
+            
+            # If no structured date found, look for date patterns in text
+            if not post_data['post_date']:
+                all_text = soup.get_text()
+                date_patterns = [
+                    r'\d{1,2}/\d{1,2}/\d{4}',
+                    r'\d{4}-\d{2}-\d{2}',
+                    r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}',
+                    r'\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}'
+                ]
+                
+                for pattern in date_patterns:
+                    match = re.search(pattern, all_text)
+                    if match:
+                        post_data['post_date'] = match.group()
+                        break
+            
+            # Ensure we have at least title and content
+            if not post_data['title'] and post_data['content']:
+                # Use first 50 characters of content as title
+                post_data['title'] = post_data['content'][:50] + "..." if len(post_data['content']) > 50 else post_data['content']
+            
+            # Format all posts consistently as "Subject: [title], Post: [content]"
+            if not post_data['content'] or len(post_data['content'].strip()) < 10:
+                if post_data['title']:
+                    # Store title-only posts in the specified format
+                    post_data['content'] = f"Subject: {post_data['title']}, Post: [No additional content]"
+                else:
+                    self.logger.warning(f"No title or content extracted from {url}")
+                    return None
+            else:
+                # Format posts with content consistently
+                subject = post_data['title'] if post_data['title'] else "[No subject]"
+                original_content = post_data['content']
+                post_data['content'] = f"Subject: {subject}, Post: {original_content}"
+            
+            self.logger.debug(f"Extracted post data: {post_data['title'][:30]}...")
+            return post_data
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting post data from {url}: {str(e)}")
+            return None
+    
+    def clean_text(self, text: str) -> str:
+        """Clean and normalize extracted text."""
+        if not text:
+            return ""
+        
+        # Remove extra whitespace and normalize
+        text = re.sub(r'\s+', ' ', text.strip())
+        
+        # Remove common forum artifacts
+        text = re.sub(r'(Quote:|Reply:|Originally posted by:)', '', text, flags=re.IGNORECASE)
+        
+        # Remove excessive punctuation
+        text = re.sub(r'([.!?]){3,}', r'\1\1\1', text)
+        
+        # Remove URLs if they're standalone
+        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+        
+        return text.strip()

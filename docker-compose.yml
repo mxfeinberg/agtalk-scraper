@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  agtalk-scraper:
+    image: agtalk-scraper:latest
+    container_name: agtalk-scraper
+    network_mode: host
+    environment:
+      # Database connection - set these in your .env file
+      - DATABASE_URL=${DATABASE_URL}
+      - PGHOST=${PGHOST}
+      - PGPORT=${PGPORT}
+      - PGDATABASE=${PGDATABASE}
+      - PGUSER=${PGUSER}
+      - PGPASSWORD=${PGPASSWORD}
+    restart: unless-stopped
