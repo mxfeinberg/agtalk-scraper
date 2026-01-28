@@ -57,10 +57,10 @@ class AgTalkParser:
             self.logger.error(f"Error extracting post URLs: {str(e)}")
             return []
     
-    def extract_post_data(self, soup: BeautifulSoup, url: str) -> List[Dict]:
+    def extract_post_data(self, soup: BeautifulSoup, url: str, forum_id: Optional[int] = None) -> List[Dict]:
         """Extract all post data from thread page (flat display shows all posts)."""
         posts = []
-        
+
         try:
             # Extract thread ID from URL for all posts
             parsed_url = urlparse(url)
@@ -93,7 +93,8 @@ class AgTalkParser:
                     'post_date': '',
                     'content': '',
                     'thread_id': thread_id,
-                    'post_number': len(posts) + 1  # Use posts array length for correct numbering
+                    'post_number': len(posts) + 1,  # Use posts array length for correct numbering
+                    'forum_id': forum_id
                 }
                 
                 # Extract author from the profile link

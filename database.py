@@ -54,7 +54,8 @@ class DatabaseManager:
                             content TEXT NOT NULL,
                             scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             thread_id TEXT,
-                            post_number INTEGER
+                            post_number INTEGER,
+                            forum_id INTEGER
                         )
                     ''')
                     
@@ -74,7 +75,24 @@ class DatabaseManager:
                     cursor.execute('''
                         CREATE INDEX IF NOT EXISTS idx_posts_post_date ON posts(post_date)
                     ''')
-                    
+
+                    cursor.execute('''
+                        CREATE INDEX IF NOT EXISTS idx_forum_id ON posts(forum_id)
+                    ''')
+
+                    # Add forum_id column if it doesn't exist (for existing databases)
+                    cursor.execute('''
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM information_schema.columns
+                                WHERE table_name='posts' AND column_name='forum_id'
+                            ) THEN
+                                ALTER TABLE posts ADD COLUMN forum_id INTEGER;
+                            END IF;
+                        END $$;
+                    ''')
+
                     conn.commit()
                     self.logger.info("Database initialized successfully")
                     
@@ -110,9 +128,9 @@ class DatabaseManager:
                     
                     # Insert post data with ON CONFLICT handling
                     cursor.execute('''
-                        INSERT INTO posts 
-                        (url, title, author, post_date, content, thread_id, post_number)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO posts
+                        (url, title, author, post_date, content, thread_id, post_number, forum_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (url) DO UPDATE SET
                             title = EXCLUDED.title,
                             author = EXCLUDED.author,
@@ -120,6 +138,7 @@ class DatabaseManager:
                             content = EXCLUDED.content,
                             thread_id = EXCLUDED.thread_id,
                             post_number = EXCLUDED.post_number,
+                            forum_id = EXCLUDED.forum_id,
                             scraped_at = CURRENT_TIMESTAMP
                     ''', (
                         post_data['url'],
@@ -128,7 +147,8 @@ class DatabaseManager:
                         post_timestamp,
                         post_data['content'],
                         post_data.get('thread_id', ''),
-                        post_data.get('post_number', 0)
+                        post_data.get('post_number', 0),
+                        post_data.get('forum_id')
                     ))
                     
                     rows_affected = cursor.rowcount

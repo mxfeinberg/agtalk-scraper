@@ -4,6 +4,7 @@ Robots.txt compliance checker.
 
 import logging
 import urllib.robotparser
+import urllib.request
 from urllib.parse import urljoin
 
 class RobotsChecker:
@@ -22,7 +23,17 @@ class RobotsChecker:
             robots_url = urljoin(self.base_url, '/robots.txt')
             self.robots_parser = urllib.robotparser.RobotFileParser()
             self.robots_parser.set_url(robots_url)
-            self.robots_parser.read()
+            
+            # Manually fetch robots.txt with timeout to prevent stalling
+            request = urllib.request.Request(
+                robots_url,
+                headers={'User-Agent': self.user_agent}
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                robots_content = response.read().decode('utf-8')
+            
+            # Parse the content directly instead of using .read()
+            self.robots_parser.parse(robots_content.splitlines())
             self.logger.info(f"Loaded robots.txt from: {robots_url}")
             
         except Exception as e:

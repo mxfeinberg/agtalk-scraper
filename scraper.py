@@ -104,8 +104,8 @@ class AgTalkScraper:
                 
                 response = self.make_request(current_url)
                 soup = BeautifulSoup(response.content, 'html.parser')
-                
-                posts_data = self.parser.extract_post_data(soup, current_url)
+
+                posts_data = self.parser.extract_post_data(soup, current_url, self.config.forum_id)
                 
                 if not posts_data:
                     # No posts found on this page, we've reached the end
