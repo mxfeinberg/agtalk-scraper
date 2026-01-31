@@ -1,0 +1,54 @@
+## Codebase Patterns
+- Use `@property` for backward-compatible computed fields when replacing dataclass fields
+- ScraperConfig validation happens in `__post_init__`, validate all new fields there
+- mypy is not installed; use `python3 -m py_compile` for syntax validation
+
+---
+
+## 2026-01-31 - US-005
+- What was implemented: Added conditional logic in main.py to use `scrape_forums()` for multiple forums and `scrape_forum()` for single forum
+- Files changed: `main.py`
+- **Learnings for future iterations:**
+  - Backward compatibility is maintained by checking `len(forum_ids) > 1` before calling the multi-forum method
+  - The startup log message already shows all forum IDs from US-004 changes
+  - Keep the conditional simple - just check the length of the list
+---
+
+## 2026-01-31 - US-004
+- What was implemented: Updated CLI to accept multiple forum IDs via `--forum-id` (multiple times) and `--forum-ids` (comma-separated)
+- Files changed: `main.py`
+- **Learnings for future iterations:**
+  - `argparse` with `action='append'` creates a list when used multiple times, returns `None` when not provided
+  - Deduplication preserving order uses a `seen` set alongside the result list
+  - The CLI merges both `--forum-id` and `--forum-ids` args, prioritizing `--forum-id` order first
+  - Default `[3]` is applied after merging when neither argument is provided
+---
+
+## 2026-01-31 - US-003
+- What was implemented: Added `scrape_forums(self) -> int` method to AgTalkScraper for round-robin multi-forum scraping
+- Files changed: `scraper.py`
+- **Learnings for future iterations:**
+  - Round-robin processing iterates pages first, then forums (outer loop = pages, inner loop = forum_ids)
+  - Remember to set the correct `forum_id` on each post when scraping multiple forums (the parser extracts from config.forum_id by default)
+  - INFO-level logging shows which forum/page is being processed for visibility
+  - The method reuses `scrape_forum_page()` and thread processing logic from `scrape_forum()` - keep these methods decoupled
+---
+
+## 2026-01-31 - US-002
+- What was implemented: Added `get_forum_page_url(self, forum_id: int, page: int) -> str` helper method to AgTalkScraper
+- Files changed: `scraper.py`
+- **Learnings for future iterations:**
+  - The helper method handles pagination with bookmark param (page 1 has no bookmark, page > 1 uses `bookmark = 1 + ((page-1) * 50)`)
+  - Refactored `get_forum_page_urls()` to use the new helper, keeping it simple and DRY
+  - Helper methods that build URLs should take explicit parameters for flexibility (forum_id, page) rather than reading from config directly
+---
+
+## 2026-01-31 - US-001
+- What was implemented: Added `forum_ids: list[int]` field to ScraperConfig dataclass with default `[3]`
+- Files changed: `config.py`
+- **Learnings for future iterations:**
+  - The `forum_id` field was converted to a `@property` for backward compatibility
+  - Validation in `__post_init__` checks that all forum IDs are positive integers
+  - Use `field(default_factory=lambda: [3])` for mutable default values in dataclasses
+  - psycopg2-binary has build issues with Python 3.14, but pure Python tests work
+---

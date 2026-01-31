@@ -1,0 +1,84 @@
+{
+  "project": "agtalk-scraper",
+  "branchName": "ralph/multi-forum-scraping",
+  "description": "Multi-Forum Scraping Support - Add ability to scrape multiple forums with round-robin page processing",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add forum_ids field to ScraperConfig",
+      "description": "As a developer, I need ScraperConfig to support a list of forum IDs instead of just one.",
+      "acceptanceCriteria": [
+        "Add forum_ids: list[int] field to ScraperConfig dataclass with default [3]",
+        "Keep forum_id: int field for backward compatibility, computed as first item of forum_ids",
+        "Update __post_init__ to validate all forum IDs in the list are positive integers",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Add get_forum_page_url helper method",
+      "description": "As a developer, I need a helper method to build URLs for any forum/page combination.",
+      "acceptanceCriteria": [
+        "Add get_forum_page_url(self, forum_id: int, page: int) -> str method to AgTalkScraper",
+        "Method returns correct URL for page 1 (no bookmark param)",
+        "Method returns correct URL for page > 1 (with bookmark = 1 + ((page-1) * 50))",
+        "Refactor get_forum_page_urls() to use this new helper internally",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Implement scrape_forums method with round-robin processing",
+      "description": "As a developer, I need a new method that scrapes multiple forums with interleaved page processing.",
+      "acceptanceCriteria": [
+        "Add scrape_forums(self) -> int method to AgTalkScraper class",
+        "Method iterates page numbers from start_page to start_page + max_pages - 1",
+        "For each page number, iterates through all forum_ids from config",
+        "Uses get_forum_page_url() to build URLs",
+        "Reuses existing scrape_forum_page() and thread processing logic",
+        "Logs which forum/page is being processed at INFO level",
+        "Returns total posts scraped across all forums",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Update CLI to accept multiple forum IDs",
+      "description": "As a user, I want to specify multiple forum IDs via command line arguments.",
+      "acceptanceCriteria": [
+        "Add --forum-ids argument accepting comma-separated integers (e.g., --forum-ids 3,7,12)",
+        "Change --forum-id to use action='append' to allow multiple uses",
+        "Merge both args into single list, deduplicating while preserving order",
+        "Default to [3] if neither argument provided",
+        "Pass forum_ids list to ScraperConfig constructor",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Use scrape_forums when multiple forums specified",
+      "description": "As a user, I want the scraper to use round-robin processing when I specify multiple forums.",
+      "acceptanceCriteria": [
+        "In main.py, call scraper.scrape_forums() when len(forum_ids) > 1",
+        "Call scraper.scrape_forum() when only one forum ID (backward compatibility)",
+        "Update startup log message to show all forum IDs being scraped",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}
