@@ -4,16 +4,22 @@ A sophisticated Python web scraping tool designed to ethically extract and manag
 
 ## Features
 
+- **Multi-Forum Scraping**: Scrape multiple forums in a single run with round-robin page processing
 - **Ethical Scraping**: Full robots.txt compliance and respectful rate limiting
 - **Multi-page Support**: Handles both forum pagination and multi-page thread discussions
 - **PostgreSQL Integration**: Robust database storage with proper indexing
 - **Flexible Pagination**: Support for custom starting pages and page ranges
-- **Complete Data Capture**: Extracts titles, authors, dates, content, and thread relationships
+- **Complete Data Capture**: Extracts titles, authors, dates, content, thread relationships, and forum IDs
 - **Advanced Parsing**: Handles AgTalk's complex HTML structure with enhanced date extraction
 
 ## Installation
 
-1. Install Python dependencies:
+1. Install dependencies using [uv](https://docs.astral.sh/uv/):
+```bash
+uv sync
+```
+
+Or with pip:
 ```bash
 pip install psycopg2-binary requests beautifulsoup4 trafilatura
 ```
@@ -22,15 +28,8 @@ pip install psycopg2-binary requests beautifulsoup4 trafilatura
 
 ## Quick Start
 
-### Using Replit (Recommended)
-The scraper automatically uses Replit's PostgreSQL database when deployed on Replit.
-
-```bash
-python main.py --forum-id 3 --max-pages 5 --delay 2.0 --log-level INFO
-```
-
 ### Local Setup
-For local development, set up your PostgreSQL database first:
+Set up your PostgreSQL database and configure environment variables:
 
 ```bash
 # Run the setup script
@@ -39,8 +38,14 @@ python setup_local_db.py
 # Test your connection
 python debug_database.py
 
-# Start scraping
-python main.py --forum-id 3 --max-pages 1 --delay 2.0 --log-level INFO --reset-db
+# Start scraping (single forum)
+uv run main.py --forum-id 3 --max-pages 5 --delay 2.0 --log-level INFO
+
+# Scrape multiple forums with round-robin processing
+uv run main.py --forum-ids 3,7 --max-pages 5 --delay 2.0
+
+# Reset database and scrape
+uv run main.py --reset-db --max-pages 1
 ```
 
 ## Database Setup
@@ -80,7 +85,8 @@ export PGPASSWORD=<YOUR_PASSWORD>
 python main.py [OPTIONS]
 
 Options:
-  --forum-id FORUM_ID       Forum ID to scrape (default: 3)
+  --forum-id FORUM_ID       Forum ID to scrape (can be specified multiple times)
+  --forum-ids IDS           Comma-separated forum IDs (e.g., 3,7,12)
   --max-pages MAX_PAGES     Maximum number of pages to scrape (default: 10)
   --start-page START_PAGE   Page number to start scraping from (default: 1)
   --delay DELAY             Delay between requests in seconds (default: 2.0)
@@ -93,6 +99,12 @@ Options:
 ```bash
 # Scrape first 5 pages of forum 3
 python main.py --forum-id 3 --max-pages 5
+
+# Scrape multiple forums with comma-separated IDs (round-robin processing)
+python main.py --forum-ids 3,7,12 --max-pages 5
+
+# Scrape multiple forums using repeated --forum-id flags
+python main.py --forum-id 3 --forum-id 7 --max-pages 5
 
 # Scrape pages 10-15 with debug logging
 python main.py --start-page 10 --max-pages 5 --log-level DEBUG
@@ -113,9 +125,12 @@ CREATE TABLE posts (
     content TEXT NOT NULL,
     scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     thread_id TEXT,
-    post_number INTEGER
+    post_number INTEGER,
+    forum_id INTEGER
 );
 ```
+
+Indexed on: `url`, `thread_id`, `scraped_at`, `post_date`, `forum_id`.
 
 ## Troubleshooting
 
@@ -155,6 +170,15 @@ psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE agtalk_posts TO agtalk_use
 - **robots_checker.py**: robots.txt compliance verification
 
 ## Key Features
+
+### Multi-Forum Round-Robin Scraping
+When scraping multiple forums, pages are processed in round-robin order to distribute load evenly. For example, with `--forum-ids 3,7 --max-pages 3`:
+1. Page 1 of forum 3
+2. Page 1 of forum 7
+3. Page 2 of forum 3
+4. Page 2 of forum 7
+5. Page 3 of forum 3
+6. Page 3 of forum 7
 
 ### Multi-page Thread Support
 The scraper automatically detects and follows pagination links within individual threads, ensuring complete data capture for discussions spanning multiple pages.
@@ -216,7 +240,7 @@ docker-compose up -d
 
 ## Contributing
 
-1. Test changes locally: `python main.py --max-pages 1 --log-level DEBUG`
+1. Test changes locally: `uv run main.py --max-pages 1 --log-level DEBUG`
 2. Test Docker build: `make test`
 3. Check database integrity after modifications
 
