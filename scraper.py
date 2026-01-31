@@ -48,22 +48,32 @@ class AgTalkScraper:
             self.logger.error(f"Request failed for {url}: {str(e)}")
             raise
     
+    def get_forum_page_url(self, forum_id: int, page: int) -> str:
+        """Build URL for a specific forum and page number.
+
+        Args:
+            forum_id: The forum ID to build URL for
+            page: The page number (1-indexed)
+
+        Returns:
+            The full URL for the forum page
+        """
+        if page == 1:
+            return f"{self.config.base_url}/forums/forum-view.asp?fid={forum_id}&displaytype=flat"
+        else:
+            bookmark = 1 + ((page - 1) * 50)
+            return f"{self.config.base_url}/forums/forum-view.asp?fid={forum_id}&bookmark={bookmark}&displaytype=flat"
+
     def get_forum_page_urls(self) -> list:
         """Get all forum page URLs to scrape."""
         urls = []
         page = self.config.start_page
         end_page = self.config.start_page + self.config.max_pages - 1
-        
+
         while page <= end_page:
-            if page == 1:
-                url = f"{self.config.base_url}/forums/forum-view.asp?fid={self.config.forum_id}&displaytype=flat"
-            else:
-                bookmark = 1 + ((page - 1) * 50)
-                url = f"{self.config.base_url}/forums/forum-view.asp?fid={self.config.forum_id}&bookmark={bookmark}&displaytype=flat"
-            
-            urls.append(url)
+            urls.append(self.get_forum_page_url(self.config.forum_id, page))
             page += 1
-        
+
         return urls
     
     def scrape_forum_page(self, url: str) -> list:
