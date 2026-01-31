@@ -156,10 +156,69 @@ class AgTalkScraper:
         
         return all_posts_data
     
+    def scrape_forums(self) -> int:
+        """Scrape multiple forums with round-robin page processing.
+
+        Iterates through pages, and for each page number, processes all forums
+        in config.forum_ids before moving to the next page. This provides fair
+        distribution of scraping across all forums.
+
+        Returns:
+            Total number of posts scraped across all forums
+        """
+        total_scraped = 0
+        end_page = self.config.start_page + self.config.max_pages - 1
+
+        self.logger.info(
+            f"Will scrape {self.config.max_pages} pages across {len(self.config.forum_ids)} forums "
+            f"(forums: {self.config.forum_ids})"
+        )
+
+        for page in range(self.config.start_page, end_page + 1):
+            for forum_id in self.config.forum_ids:
+                forum_url = self.get_forum_page_url(forum_id, page)
+                self.logger.info(f"Processing forum {forum_id}, page {page}: {forum_url}")
+
+                try:
+                    # Get post URLs from forum page
+                    post_urls = self.scrape_forum_page(forum_url)
+
+                    for post_url in post_urls:
+                        # Check if thread already exists in database
+                        if self.db_manager.post_exists(post_url):
+                            self.logger.debug(f"Thread already exists, skipping: {post_url}")
+                            continue
+
+                        # Scrape all posts from thread
+                        posts_data = self.scrape_post(post_url)
+
+                        if posts_data:
+                            # Save each post to database
+                            for post_data in posts_data:
+                                # Create unique URL for each post in thread
+                                unique_url = f"{post_url}#post{post_data['post_number']}"
+                                post_data['url'] = unique_url
+                                # Set the correct forum_id for this post
+                                post_data['forum_id'] = forum_id
+
+                                # Check if this specific post already exists
+                                if not self.db_manager.post_exists(unique_url):
+                                    self.db_manager.save_post(post_data)
+                                    total_scraped += 1
+
+                            if total_scraped % 10 == 0 and total_scraped > 0:
+                                self.logger.info(f"Progress: {total_scraped} posts scraped")
+
+                except Exception as e:
+                    self.logger.error(f"Error processing forum {forum_id}, page {page}: {str(e)}")
+                    continue
+
+        return total_scraped
+
     def scrape_forum(self) -> int:
         """Main scraping method."""
         total_scraped = 0
-        
+
         # Get all forum page URLs
         forum_urls = self.get_forum_page_urls()
         self.logger.info(f"Will scrape {len(forum_urls)} forum pages")
