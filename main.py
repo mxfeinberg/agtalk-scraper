@@ -103,8 +103,11 @@ def main():
         logger.info(f"Starting scrape of forum(s): {forum_ids}")
         logger.info(f"Pages {args.start_page}-{args.start_page + args.max_pages - 1}, Delay: {args.delay}s")
         
-        # Start scraping
-        scraped_count = scraper.scrape_forum()
+        # Start scraping - use round-robin for multiple forums, single forum for one
+        if len(forum_ids) > 1:
+            scraped_count = scraper.scrape_forums()
+        else:
+            scraped_count = scraper.scrape_forum()
         
         logger.info(f"Scraping completed. Total posts scraped: {scraped_count}")
         
